@@ -1,0 +1,57 @@
+---
+title: "HGNC symbols to genes from DESeq2 and WGCNA"
+output: html_notebook
+---
+
+```{r}
+library(rlang)
+library(ggplot2)
+```
+
+```{r}
+setwd("") #CHANGE IT TO YOUR OWN DIRECTORY
+```
+
+
+```{r}
+#read the results from DESeq2
+LFCmain <- read.table("res.LFCshrink.txt", header = T, row.names = 1)
+```
+
+
+
+```{r}
+library(EnsDb.Hsapiens.v86)
+#renaming the fist column to GeneID and remove ensembl version from the identifiers
+main_new <- tibble::rownames_to_column(LFCmain, "GeneID")
+main_new$HGNC <- gsub(".*;","",main_new$GeneID)
+main_new$GeneID <- sub('(?<=\\.).*$', '', main_new$GeneID, perl=TRUE)
+main_new$GeneID <- substr(main_new$GeneID, 1, nchar(main_new$GeneID)-1)
+#row.names(main_new) <- main_new$GeneID
+#main_new[1] <- NULL
+
+#export file
+write.csv(main_new, "main with HGNC symbols.csv", 
+            row.names=F, quote = FALSE)
+```
+
+```{r}
+#WGCNA output
+#turquoise module genes
+#Add HGNC symbols to the turquoise 0.32 threshold edges file
+edges.turquoise_0.32 <- read.table("CytoscapeInput-edges-turquoise 0.32.csv", header = T, sep = ",")
+library(EnsDb.Hsapiens.v86)
+edb = EnsDb.Hsapiens.v86
+#symbols <- mapIds(x = edb, keys = edges.sienna3$fromNode, column = "SYMBOL", keytype = "GENEID")
+edges.turquoise_0.32$fromAltName <- mapIds(x = edb, keys = edges.turquoise_0.32$fromNode, column = "SYMBOL", keytype="GENEID")
+
+edges.turquoise_0.32$toAltName <- mapIds(x = edb, keys = edges.turquoise_0.32$toNode, column = "SYMBOL", keytype = "GENEID")
+
+
+write.csv(edges.turquoise_0.32, "edges.turquoise_0.32 for cytoscape.csv", quote = F)
+
+
+
+
+```
+

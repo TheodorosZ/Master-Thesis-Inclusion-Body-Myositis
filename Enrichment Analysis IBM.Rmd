@@ -1,0 +1,137 @@
+---
+title: "Enrichment Analysis and plots IBM"
+output: html_notebook
+---
+
+```{r}
+setwd() #CHANGE IT TO YOUR OWN DIRECTORY
+```
+
+```{r}
+require(clusterProfiler)
+require(org.Hs.eg.db)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+```
+
+
+
+```{r}
+#enrichment GO upregulated
+up.go <- enrichGO(
+        gene     = up$GeneID,
+        universe = main_new$GeneID,
+        keyType = "ENSEMBL",
+        OrgDb    = org.Hs.eg.db,
+        ont      = "all",
+        pAdjustMethod = "BH",
+        pvalueCutoff = 0.05, 
+        readable = TRUE)
+
+head(up.go, 5)
+nrow(up.go)
+up.go <- as.data.frame(up.go)
+```
+
+```{r}
+#barplot
+
+jpeg("barplotGO up IBM.jpeg", width = 80, height = 50, units = "cm", res = 40)
+
+barplot(up.go, showCategory = 10, font.size = 30) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 40, hjust = 0.7)
+  ) + ggtitle("GO Analysis of upregulated genes in IBM")
+
+dev.off()
+```
+
+```{r}
+#dotplot
+
+jpeg("dotplotGO up IBM.jpeg", width = 80, height = 50, units = "cm", res = 40)
+
+dotplot(up.go, showCategory = 10, font.size = 30) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 40, hjust = 0.7)
+  ) + ggtitle("GO Analysis of upregulated genes in IBM")
+
+dev.off()
+```
+
+
+
+
+
+
+
+```{r}
+#enrichment GO downregulated
+down.go <- enrichGO(
+        gene     = down$GeneID,
+        universe = LFCmain_new$GeneID,
+        keyType = "ENSEMBL",
+        OrgDb    = org.Hs.eg.db,
+        ont      = "BP",
+        pAdjustMethod = "fdr",
+        pvalueCutoff = 0.05, 
+        readable = TRUE)
+
+head(down.go, 15)
+nrow(down.go)
+down.go.df <- as.data.frame(down.go)
+```
+
+```{r}
+#barplot
+
+jpeg("barplotGO down IBM.jpeg", width = 80, height = 50, units = "cm", res = 40)
+
+barplot(down.go, showCategory = 10, font.size = 30) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 40, hjust = 0.7)
+  ) + ggtitle("GO Analysis of downregulated genes in IBM")
+
+dev.off()
+```
+
+```{r}
+#dotplot
+
+jpeg("dotplotGO down IBM.jpeg", width = 80, height = 50, units = "cm", res = 40)
+
+dotplot(down.go, showCategory = 10, font.size = 30) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 40, hjust = 0.7)
+  ) + ggtitle("GO Analysis of downregulated genes in IBM")
+
+dev.off()
+```
+
+
+```{r}
+#IBM volcano plot
+#main_new with ENSEMBL identifiers in column 1
+
+jpeg("volcanoplot IBMvsAMP final.jpeg", width = 40, height = 20, units = "cm", res = 400)
+
+ggplot(LFCmain_new, aes(x = LFCmain_new$log2FoldChange, y = -log10(LFCmain_new$padj))) + geom_point(aes(color = factor(abs(LFCmain_new$log2FoldChange) > 1.5 & LFCmain_new$padj<0.01))) + geom_hline(yintercept = 2) + geom_vline(xintercept = 1.5) + geom_vline(xintercept = -1.5) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 30, hjust = 0.5)
+  )  + annotate(geom = "text", x = -3, y = 40, label = "N = 457",
+              color = "blue", size = 10) + annotate(geom = "text", x = 3, y = 40, label = "N = 2396",
+              color = "blue", size = 10) +
+  scale_colour_discrete("Significantly Up or Down Regulated") + xlab("Log2 Fold Change") + ylab("-Log10 Adjusted p-value")
+
+dev.off()
+```
+
+
+
+
+
