@@ -16,3 +16,10 @@ A script to find the co-expressed genes in IBM
 # eQTL analysis
 To run this analysis, you will need the whole exome sequencing (WES) dataset, that is currently not available publicly. Therefore, the analysis
 cannot be done without this dataset.
+
+
+
+# Information about the files
+
+raw_counts.txt = raw counts of the samples used for the analysis
+res.LFCshrink.txt = results of the differentiall gene expression analysis, using the log-fold shrinkage argument
