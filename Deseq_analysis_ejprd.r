@@ -34,17 +34,10 @@ condition_main <- read.csv(
     "sample_metadata_final.csv",
     header=TRUE, row.names=1, sep=","
     )
-condition_mirna<- read.csv(
-    "Sample_metadata_miRNA_final.csv",
-    header=TRUE, row.names=1,sep=","
-    )
 
 ##Making dds element
 (coldata_main <- data.frame(
     row.names=colnames(countdata_main), condition_main))
-(coldata_mirna <- data.frame(
-    row.names=colnames(countdata_mirna), condition_mirna))
-
 
 ##Feed this info into the dds matrix element
 dds_main <- DESeqDataSetFromMatrix(
@@ -52,32 +45,22 @@ dds_main <- DESeqDataSetFromMatrix(
     colData = coldata_main, 
     design = ~ Cohort
     )
-dds_mirna <- DESeqDataSetFromMatrix(
-    countData = countdata_mirna, 
-    colData = coldata_mirna, 
-    design = ~ Cohort
-    )
 
 dds_main <- estimateSizeFactors(dds_main)
-dds_mirna <- estimateSizeFactors(dds_mirna)
 
 #Variant stabilizing transformation of the data
 vsd_main <- varianceStabilizingTransformation(dds_main, blind=FALSE)
 head(assay(vsd_main))
 hist(assay(vsd_main))
-vsd_mirna <- varianceStabilizingTransformation(dds_mirna, blind=FALSE)
-head(assay(vsd_mirna))
-hist(assay(vsd_mirna))
+
 
 dds_main <- DESeq(dds_main)
-dds_mirna <- DESeq(dds_mirna)
+
 
 #print normalized counts for the upload
 dds_main_counts<-counts(dds_main, normalized=TRUE)
 write.table(dds_main_counts, file="dds_main_counts.txt")
 
-dds_mirna_counts<-counts(dds_mirna, normalized=TRUE)
-write.table(dds_mirna_counts, file="dds_mirna_counts.txt")
 
 
 res.LFCshrink <- lfcShrink(dds_main, contrast=c("Cohort", "IBM", "Control_Amputee"), type = "ashr")
