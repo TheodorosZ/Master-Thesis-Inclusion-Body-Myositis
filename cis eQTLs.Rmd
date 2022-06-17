@@ -1,0 +1,394 @@
+---
+title: "cis-eQTLs"
+output: html_notebook
+---
+
+
+```{r}
+setwd() #CHANGE IT TO YOUR OWN DIRECTORY
+```
+
+```{r}
+library(vcfR)
+library(dplyr)
+library(reshape)
+#read the vcf file
+vcf <- read.vcfR("23_IBM_RNA_samples_AS.leftaligned_trimmed.vcf", verbose = F)
+#extract POS, IDs, chromosomes
+positions <- as.data.frame((getPOS(vcf)))
+write.csv(positions, "positions.csv", quote = F)
+chromosomes <- as.data.frame((getCHROM(vcf)))
+write.csv(chromosomes, "chromosomes.csv", quote = F)
+IDs <- as.data.frame((getID(vcf)))
+write.csv(IDs, "IDs.csv", quote = F)
+
+#load the snp location file
+snps_loc <- read.table("snps location.txt", header = T, row.names = NULL)
+#save it as a txt with a delimiter
+#write.table(snps_loc, "snps_loc_delimited.txt", quote = F, sep = "\t")
+write.csv(snps_loc, "snps_loc_csv.csv", quote = F)
+```
+
+```{r}
+#extract allele frequencies
+af <- extract.info(vcf, element = "AF", mask = F)
+af.df <- as.data.frame(af)
+names(af.df)[1] <- "AF"
+
+
+```
+
+
+
+```{r}
+#extract genotypes
+
+#head(vcf,15)
+gt <- extract.gt(vcf, element = "GT", as.numeric = F, convertNA = T)
+
+#head(gt, 10)
+gt.df <- as.data.frame(gt)
+#head(gt.df)
+gt.df.af <- gt.df
+#create a new df with alleles frequencies and genotypes
+gt.df.af[24] <- af.df
+
+#rownames to column
+library(tibble)
+gt.df.af <- tibble::rownames_to_column(gt.df.af)
+names(gt.df.af)[1] <- "snps"
+names(gt.df.af)[25] <- "AF"
+#table(gt.df)
+#sum(is.na(gt))
+#table(gt)
+#a <- table(gt)
+```
+
+
+
+
+```{r}
+#change the names of the columns
+
+names(gt.df)[1] <- "IBM2"
+names(gt.df)[2] <- "IBM1"
+names(gt.df)[3] <- "IBM17"
+names(gt.df)[4] <- "IBM22"
+names(gt.df)[5] <- "IBM3"
+names(gt.df)[6] <- "IBM4"
+names(gt.df)[7] <- "IBM5"
+names(gt.df)[8] <- "IBM18"
+names(gt.df)[9] <- "IBM19"
+names(gt.df)[10] <- "IBM23"
+names(gt.df)[11] <- "IBM7"
+names(gt.df)[12] <- "IBM8"
+names(gt.df)[13] <- "IBM20"
+names(gt.df)[14] <- "IBM9"
+names(gt.df)[15] <- "IBM10"
+names(gt.df)[16] <- "IBM11"
+names(gt.df)[17] <- "IBM12"
+names(gt.df)[18] <- "IBM13"
+names(gt.df)[19] <- "IBM14"
+names(gt.df)[20] <- "IBM15"
+names(gt.df)[21] <- "IBM16"
+names(gt.df)[22] <- "IBM24"
+names(gt.df)[23] <- "IBM21"
+
+```
+
+
+```{r}
+#renaming values 0/0, 0|0 -> 0
+gt.df[gt.df == "0/0"] <- "0"
+gt.df[gt.df == "0|0"] <- "0"
+
+#renaming values 0/1, 0|1, 1/0 -> 1
+gt.df[gt.df == "0/1"] <- "1"
+gt.df[gt.df == "1|0"] <- "1"
+gt.df[gt.df == "0|1"] <- "1"
+gt.df[gt.df == "1/0"] <- "1"
+
+#renaming values 1/1, 1|1 -> 2
+gt.df[gt.df == "1/1"] <- "2"
+gt.df[gt.df == "1|1"] <- "2"
+
+write.table(gt.df, file = "SNPs.txt", quote = F, sep = "\t")
+```
+
+```{r}
+#drop columns from the raw counts dataframe
+countdata_main <- read.table(
+    "normalized_counts_eQTLs.txt", 
+    header=TRUE, row.names=1
+    )
+condition_main <- read.csv(
+    "sample_metadata_final.csv",
+    header=TRUE, row.names=1, sep=","
+    )
+#keep only the IBM samples
+countdata_main[25:39] <- list(NULL)
+countdata_main[24] <- NULL
+#remove rows from the condition main df
+condition_main <- condition_main[-c(24:39),]
+#remove the cohort column from the condition df
+condition_main[2] <- NULL
+#rename males to 0 and females to 1
+condition_main[condition_main == "M"] <- "0"
+condition_main[condition_main == "F"] <- "1"
+#rename the muscles, VL=0, TA=1, Gm=2
+condition_main[condition_main == "VL"] <- "0"
+condition_main[condition_main == "TA"] <- "1"
+condition_main[condition_main == "Gm"] <- "2"
+#drop the prevID column
+condition_main[2] <- NULL
+#convert the ID column to a vector
+vec1 <- condition_main$ID
+
+write.table(gt.df, file = "SNPs.txt", quote = F, sep = "\t")
+#get the transpose condition df
+library(janitor)
+condition_main.t <- t(condition_main)
+condition_main.t <- janitor::row_to_names(condition_main.t, row_number = 1)
+condition_main.t <- condition_main.t[-c(2), ]
+#write a covariates file
+write.table(condition_main.t, file = "covariates.txt", quote = F, sep = "\t")
+#renaming rownames
+condition_main <- cbind(id = rownames(condition_main), condition_main)
+#write the count matrix file
+write.table(countdata_main, file = "counts.txt", quote = F, sep = "\t")
+```
+
+```{r}
+#keep the SNPs that are in both SNPs and SNPs location dataframes
+
+snps <- read.table("SNPs.txt", header = T)
+#renaming the first column to snpsID and remove the "_"
+snps_new <- tibble::rownames_to_column(snps, "SNPsID")
+snps_new$SNPsID <- sub('(?<=\\_).*$', '', snps_new$SNPsID, perl = T)
+snps_new$SNPsID <- substr(snps_new$SNPsID, 1, nchar(snps_new$SNPsID)-1)
+
+#remove rows that contain the character "chr"
+snps_new <- snps_new[!grepl("chr", snps_new$SNPsID),]
+#first column to row names after removing duplicates
+library(tidyverse)
+snps_new <- snps_new[!duplicated(snps_new$SNPsID),]
+row.names(snps_new) <- snps_new$SNPsID
+snps_new[1] <- NULL
+#export the file 
+write.table(snps_new, "snps_new.txt", quote = F, sep = "\t")
+```
+
+```{r}
+#remove the "_" from the gt.af.df
+gt.df.af$snps <- sub('(?<=\\_).*$', '', gt.df.af$snps, perl = T)
+gt.df.af$snps <- substr(gt.df.af$snps, 1, nchar(gt.df.af$snps)-1)
+
+#remove rows that contain the character "chr"
+gt.df.af <- gt.df.af[!grepl("chr", gt.df.af$snps),]
+```
+
+
+```{r}
+#do the eQTLs using matrix eQTL package
+library(MatrixEQTL)
+cis_threshold <- 1e-10
+trans_threshold <- 1e-10
+cisDist <- 1e7
+
+#output file name
+output_file_name_cis = tempfile()
+output_file_name_tra = tempfile()
+
+#linear model to use
+base.dir = find.package("MatrixEQTL")
+useModel = modelLINEAR
+
+#only associations significant at this level will be saved
+
+pvOutputThreshold_cis = cis_threshold
+pvOutputThreshold_tra = trans_threshold
+
+errorCovariance = numeric()
+
+#Distance for local gene-SNP pairs
+cisDist = cisDist
+
+#Load genotype data
+snps = SlicedData$new()
+snps$fileDelimiter="\t"
+snps$fileOmitCharacters="NA"
+snps$fileSkipColumns=1
+snps$fileSkipRows=1
+snps$fileSliceSize=2000
+snps$LoadFile("snps_new.txt")
+
+#load gene expression data
+gene = SlicedData$new()
+gene$fileDelimiter = "\t"
+gene$fileOmitCharacters = "NA"
+gene$fileSkipRows = 1
+gene$fileSkipColumns = 1
+gene$fileSliceSize = 2000
+gene$LoadFile("counts.txt")
+
+#load covariates
+cvrt = SlicedData$new()
+cvrt$fileDelimiter = "\t"
+cvrt$fileOmitCharacters = "NA"
+cvrt$fileSkipRows = 1
+cvrt$fileSkipColumns = 1
+if(length("covariates.txt")>0) {
+  cvrt$LoadFile("covariates.txt")
+}
+
+##Run the analysis
+#load the snps location
+#snpspos = read.table("snps_loc_delimited.txt", sep = "\t", quote = "")
+snpspos = read.table("snps_loc_from csv to text.txt", header = T, row.names = NULL)
+#remove NA values
+snpspos = na.omit(snps_loc)
+
+#remove IDs from column 1 to rownames
+library(tidyverse)
+snpspos <- snpspos[!duplicated(snpspos$IDs),]
+snpspos = na.omit(snpspos)
+#row.names(snpspos) <- snpspos$IDs
+#snpspos[1] <- NULL
+write.table(snpspos, "SNPs location without IDs.txt", quote = F)
+
+#load the gene positions
+genepos = read.table("normalized_id_eQTLs_input.txt", header = T, stringsAsFactors = F)
+genepos$chromosome_name <- sub("^", "chr", genepos$chromosome_name)
+#remove NA values
+genepos = na.omit(genepos)
+
+
+```
+
+
+
+
+```{r}
+me = Matrix_eQTL_main(
+  snps = snps,
+  gene = gene,
+  cvrt = cvrt,
+  output_file_name = output_file_name_tra,
+  pvOutputThreshold = pvOutputThreshold_tra,
+  useModel = useModel,
+  errorCovariance = errorCovariance,
+  verbose = T,
+  output_file_name.cis = output_file_name_cis,
+  pvOutputThreshold.cis = pvOutputThreshold_cis,
+  snpspos = snpspos,
+  genepos = genepos,
+  cisDist = cisDist,
+  pvalue.hist = T,
+  min.pv.by.genesnp = F,
+  noFDRsaveMemory = F
+)
+
+
+unlink(output_file_name_tra)
+unlink(output_file_name_cis)
+
+```
+
+```{r}
+me_qq = Matrix_eQTL_main(
+  snps = snps,
+  gene = gene,
+  cvrt = cvrt,
+  output_file_name = output_file_name_tra,
+  pvOutputThreshold = pvOutputThreshold_tra,
+  useModel = useModel,
+  errorCovariance = errorCovariance,
+  verbose = T,
+  output_file_name.cis = output_file_name_cis,
+  pvOutputThreshold.cis = pvOutputThreshold_cis,
+  snpspos = snpspos,
+  genepos = genepos,
+  cisDist = cisDist,
+  pvalue.hist = "qqplot",
+  min.pv.by.genesnp = F,
+  noFDRsaveMemory = F
+)
+
+unlink(output_file_name_tra)
+unlink(output_file_name_cis)
+```
+
+
+```{r}
+
+cat("Analysis done in: " , me$time.in.sec, " seconds ", "\n")
+cat("Detected eQTLs:", "\n")
+
+#show(me$all$eqtls)
+cis.eqtls <- me$cis$eqtls
+head(me$trans$eqtls)
+head(me$cis$eqtls, n=15)
+```
+
+```{r}
+#make a histogram of local and distant p-values
+plot(me)
+```
+
+
+```{r}
+#make a qq-plot
+plot(me_qq)
+```
+
+```{r}
+library(dplyr)
+snp_values = read.table("snps_new.txt", row.names = 1, header = T)
+snp_values = data.frame(snps = rownames(snp_values), snp_values, stringsAsFactors = F)
+
+top_eqtls = filter(me$cis$eqtls, FDR <= 0.05) %>%
+  arrange(FDR) %>%
+  distinct(gene, .keep_all = T)
+
+head(top_eqtls, n=15)
+
+```
+
+```{r}
+#add MAF to the cis-eQTL df
+#all cis
+cis.df.all <- merge(cis.eqtls, gt.df.af[, c("snps", "AF")],  by="snps", all.x = T)
+#top cis
+new_cis.df <- merge(top_eqtls, gt.df.af[, c("snps", "AF")],  by="snps", all.x = T)
+```
+
+
+```{r}
+#read the dysregulated genes from the DESeq2 analysis
+
+dys = read.table("dysregulated genes with LFC shrink for eQTLs.txt", header = T)
+names(dys)[1] <- "gene"
+```
+
+```{r}
+#overlapping genes top cis
+overlapping_samples <- merge(dys, new_cis.df[, c("gene", "snps")], by="gene", all.x = T)
+#sort it based on the snps column
+overlapping_samples_new <- overlapping_samples[order(overlapping_samples$snps, na.last = T),]
+#add the MAF to the table
+overlapping_samples_new.af <- merge(overlapping_samples_new, new_cis.df[, c("snps", "AF")], by="snps", all.x = T)
+
+#export file
+write.table(overlapping_samples_new.af, "dysregulated genes with snps and AF.txt", quote = F)
+
+```
+
+```{r}
+#overlapping genes all cis
+overlapping_samples.all <- merge(dys, cis.df.all[, c("gene", "snps")], by="gene", all.x = T)
+#sort it based on the snps column
+overlapping_samples_new.all <- overlapping_samples[order(overlapping_samples.all$snps, na.last = T),]
+#add the MAF to the table
+overlapping_samples_new.af.all <- merge(overlapping_samples_new.all, new_cis.df[, c("snps", "AF")], by="snps", all.x = T)
+```
+
