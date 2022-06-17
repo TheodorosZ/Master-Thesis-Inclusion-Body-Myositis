@@ -1,0 +1,462 @@
+---
+title: "WGCNA IBM"
+output: html_notebook
+---
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    BiocManager::install("preprocessCore")
+```
+
+
+```{r}
+#clear workspace and set string as factors to false
+rm(list=ls())
+options(stringsAsFactors = F)
+#allowWGCNAThreads()
+#enableWGCNAThreads()
+library(WGCNA)
+library(rstudioapi)
+library(dplyr)
+library(DESeq2)
+#library(preprocessCore)
+```
+
+```{r}
+#read the data and the metadata
+#INPUT data
+#remove the TMD samples
+countdata_main <- read.table(
+    "raw_counts.txt", 
+    header=TRUE, row.names=1
+    )
+condition_main <- read.csv(
+    "Sample_metadata_final.csv",
+    header=TRUE, row.names=1, sep=","
+    )
+#remove the TMD samples
+countdata_main[25:30] <- NULL
+condition_main <- condition_main[-c(25:30),]
+```
+
+```{r}
+##Making dds element
+(coldata_main <- data.frame(
+    row.names=colnames(countdata_main), condition_main))
+```
+
+
+
+```{r}
+##Feed this info into the dds matrix element
+dds_main <- DESeqDataSetFromMatrix(
+    countData = countdata_main, 
+    colData = coldata_main, 
+    design = ~ Cohort
+    )
+dataExpr_deseq <- dds_main
+#removing the genes with 0 reads and then do the normalization
+keep <- rowSums(counts(dds_main)) > 10
+dds_main <- dds_main[keep,]
+dds_main <- estimateSizeFactors(dds_main)
+vsd_main <- varianceStabilizingTransformation(dds_main, blind=FALSE)
+head(assay(vsd_main))
+hist(assay(vsd_main))
+dds_main <- DESeq(dds_main)
+
+#print normalized counts for the upload
+dds_main_counts<-counts(dds_main, normalized=TRUE)
+write.table(dds_main_counts, file="dds_main_counts.txt")
+
+#read the normalized counts
+normalized_counts <- read.table("dds_main_counts.txt", header = T)
+```
+
+
+
+
+```{r}
+normalized_counts_updated <- normalized_counts
+#first column -> row.names
+#row.names(normalized_counts_updated) <- normalized_counts_updated$X
+#normalized_counts_updated[1] <- NULL
+#renaming the fist column to GeneID and remove ensembl version from the identifiers
+normalized_counts_updated <- tibble::rownames_to_column(normalized_counts_updated, "GeneID")
+normalized_counts_updated$GeneID <- sub('(?<=\\.).*$', '', normalized_counts_updated$GeneID, perl=TRUE)
+normalized_counts_updated$GeneID <- substr(normalized_counts_updated$GeneID, 1, nchar(normalized_counts_updated$GeneID)-1)
+```
+
+```{r}
+#remove duplicates (not needed)
+row.names(normalized_counts_updated) <- normalized_counts_updated$GeneID
+normalized_counts_updated[1] <- NULL
+```
+
+
+```{r}
+gsg = goodSamplesGenes(normalized_counts_updated, verbose = 3);
+gsg$allOK
+```
+
+
+
+
+```{r}
+# normalized counts from RNA-seq data should be log-transformed
+
+data.log <- log2(normalized_counts_updated+1)
+
+data.log <- as.data.frame(t(as.matrix(data.log)))
+```
+
+```{r}
+#traitData = read.csv("Sample_metadata_final.csv", header=T)
+traitData <- condition_main
+
+
+#traitData <- traitData %>% select(-name) #include if TMDdddd is used
+traitData <- traitData %>% select(-Prev_sampleID,-Muscle, -Biopsy_Age)
+
+data.filtered.IBM = data.log[row.names(data.log) %in% traitData$ID,]
+
+# Form a data frame analogous to expression data that will hold the clinical traits.
+samples = rownames(data.filtered.IBM);
+traitRows = match(samples, traitData$ID);
+datTraits = traitData[traitRows, -1];
+rownames(datTraits) = traitData[traitRows, 1];
+
+datTraits <- datTraits[,-5]
+#datTraits$Biopsy_Age <- as.numeric(datTraits$Biopsy_Age)
+datTraits[datTraits=="M"]<-0
+datTraits[datTraits=="F"]<-1
+datTraits[datTraits=="IBM"]<-0
+#datTraits[datTraits=="Control_TMD"]<-1
+datTraits[datTraits=="Control_Amputee"]<-1 #change to 2 if you include TMD
+#datTraits[datTraits=="VL"] <- 0
+#datTraits[datTraits=="TA"] <- 1
+#datTraits[datTraits=="Gm"] <- 3
+#datTraits[datTraits=="Tadx"] <- 4
+#datTraits[datTraits=="EHL"] <- 5
+datTraits <- mutate_all(datTraits, function(x) as.numeric(as.character(x)))
+
+collectGarbage();
+```
+
+```{r}
+# Cluster samples
+sampleTree = hclust(dist(data.filtered.IBM), method = "average")
+
+# Convert traits to a color representation: white means low, red means high, grey means missing entry
+traitColors = numbers2colors(datTraits, signed = FALSE);
+sizeGrWindow(12,12)
+
+# Plot the sample dendrogram and the colors underneath.
+plotDendroAndColors(sampleTree, traitColors,
+                    groupLabels = names(datTraits), cex.dendroLabels = 0.5, 
+                    main = "Sample dendrogram and trait heatmap")
+```
+
+```{r}
+save(data.filtered.IBM, datTraits, file = "WGCNA-input.RData")
+```
+
+```{r}
+# Allow multi-threading within WGCNA. This helps speed up certain calculations.
+# At present this call is necessary for the code to work.
+# Any error here may be ignored but you may want to update WGCNA if you see one.
+# Caution: skip this line if you run RStudio or other third-party R environments. 
+# See note above.
+enableWGCNAThreads(nThreads = 15)
+# Load the data saved in the first part
+lnames = load(file = "WGCNA-input.RData");
+#The variable lnames contains the names of loaded variables.
+lnames
+```
+
+```{r}
+# Choose a set of soft-thresholding powers
+powers = seq(1,15, by=2)
+
+# Call the network topology analysis function
+sft = pickSoftThreshold(data.filtered.IBM, powerVector = powers, verbose = 5)
+
+#save(sft, file = "WGCNA-sft.RData")
+
+# Plot the results:
+sizeGrWindow(9, 5)
+par(mfrow = c(1,2));
+cex1 = 0.9;
+
+# Scale-free topology fit index as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n", main = paste("Scale independence"));
+
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2], labels=powers,cex=cex1,col="red")
+
+# this line corresponds to using an R^2 cut-off of h
+abline(h=0.80,col="red")
+
+# Mean connectivity as a function of the soft-thresholding power
+plot(sft$fitIndices[,1], sft$fitIndices[,5], xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n", main = paste("Mean connectivity"))
+
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+```
+
+```{r}
+# looking at both - soft threshold and mean connectivity 
+# I decided to go with power 6 
+cor <- WGCNA::cor
+net = blockwiseModules(data.filtered.IBM, power = 6,  
+                       TOMType = "signed", minModuleSize = 30,  
+                       reassignThreshold = 0, mergeCutHeight = 0.25, 
+                       numericLabels = TRUE, pamRespectsDendro = FALSE, 
+                       saveTOMs = TRUE, deepSplit = 1,
+                       saveTOMFileBase = "expTOM", 
+                       verbose = 3)
+
+save(net, file = "WGCNA-net.RData")
+cor<-stats::cor
+
+```
+
+```{r}
+# open a graphics window
+sizeGrWindow(15, 9)
+# Convert labels to colors for plotting
+mergedColors = labels2colors(net$colors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net$dendrograms[[1]], mergedColors[net$blockGenes[[1]]],
+                    "Module colors",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+```
+
+```{r}
+moduleLabels = net$colors
+moduleColors = labels2colors(net$colors)
+table(moduleColors)
+MEs = net$MEs;
+geneTree = net$dendrograms[[1]];
+save(MEs, moduleLabels, moduleColors, geneTree, file = "network-reconstruction.RData")
+```
+
+##########################################
+Relate modules to external clinical traits
+##########################################
+
+```{r}
+# Load the expression and trait data saved in the first part
+lnames = load(file = "WGCNA-input.RData");
+#The variable lnames contains the names of loaded variables.
+lnames
+# Load network data saved in the second part.
+lnames = load(file = "network-reconstruction.RData");
+lnames
+```
+
+```{r}
+# Define numbers of genes and samples
+nGenes = ncol(data.filtered.IBM);
+nSamples = nrow(data.filtered.IBM);
+# Recalculate MEs with color labels
+MEs0 = moduleEigengenes(data.filtered.IBM, moduleColors)$eigengenes
+MEs = orderMEs(MEs0)
+moduleTraitCor = cor(MEs, datTraits, use = "p");
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
+```
+
+```{r}
+sizeGrWindow(20,20)
+# Will display correlations and their p-values
+textMatrix =  paste(signif(moduleTraitCor, 2), "\n(",
+                           signif(moduleTraitPvalue, 1), ")", sep ="");
+dim(textMatrix) = dim(moduleTraitCor)
+par(mar = c(3, 3, 3, 3));
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = moduleTraitCor,
+               xLabels = names(datTraits),
+               yLabels = names(MEs),
+               ySymbols = names(MEs),
+               colorLabels = FALSE,
+               colors = blueWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               verticalSeparator.col = 5,
+               cex.text = 0.1,
+               cex.lab.y = 0.3,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+```
+
+```{r}
+# Define variable time containing the time column of datTrait
+disease = as.data.frame(datTraits$Cohort);
+names(disease) = "disease"
+# names (colors) of the modules
+modNames = substring(names(MEs), 3)
+
+geneModuleMembership = as.data.frame(cor(data.filtered.IBM, MEs, use = "p"));
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), nSamples));
+
+names(geneModuleMembership) = paste("MM", modNames, sep="");
+names(MMPvalue) = paste("p.MM", modNames, sep="");
+
+geneTraitSignificance = as.data.frame(cor(data.filtered.IBM, disease, use = "p"));
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), nSamples));
+
+names(geneTraitSignificance) = paste("GS.", names(disease), sep="");
+names(GSPvalue) = paste("p.GS.", names(disease), sep="");
+
+```
+
+```{r}
+module = "turquoise"
+column = match(module, modNames);
+moduleGenes = moduleColors==module;
+
+sizeGrWindow(7, 7);
+par(mfrow = c(1,1));
+verboseScatterplot(abs(geneModuleMembership[moduleGenes, column]),
+                   abs(geneTraitSignificance[moduleGenes, 1]),
+                   xlab = paste("Module Membership in", module, "module"),
+                   ylab = "Gene significance for disease",
+                   main = paste("Module membership vs. gene significance\n"),
+                   cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = module)
+```
+
+```{r}
+# Create the starting data frame
+geneInfo0 = data.frame(Gene.ID = colnames(data.filtered.IBM),
+                      moduleColor = moduleColors,
+                      geneTraitSignificance,
+                      GSPvalue)
+
+# Order modules by their significance for time
+modOrder = order(-abs(cor(MEs, disease, use = "p")));
+
+# Add module membership information in the chosen order
+for (mod in 1:ncol(geneModuleMembership))
+{
+  oldNames = names(geneInfo0)
+  geneInfo0 = data.frame(geneInfo0, geneModuleMembership[, modOrder[mod]], 
+                         MMPvalue[, modOrder[mod]]);
+  names(geneInfo0) = c(oldNames, paste("MM.", modNames[modOrder[mod]], sep=""),
+                       paste("p.MM.", modNames[modOrder[mod]], sep=""))
+}
+# Order the genes in the geneInfo variable first by module color, then by geneTraitSignificance
+geneOrder = order(geneInfo0$moduleColor, -abs(geneInfo0$GS.disease));
+geneInfo = geneInfo0[geneOrder, ]
+```
+
+
+
+######GO ANALYSIS SECTION######
+
+
+```{r}
+#turquoise module
+module_df <- data.frame(gene_id = names(net$colors), colors = labels2colors(net$colors))
+#module of interest
+turquoise_module = c("turquoise")
+submodturquoise = module_df %>% subset(colors %in% turquoise_module)
+write.table(submodturquoise, "turquoise module genes.txt", quote = F)
+
+row.names(module_df) = module_df$gene_id
+Genes_turquoise<- row.names(submodturquoise)
+
+#enrichment analysis turquoise module
+
+turquoiseGO <- enrichGO(
+        gene     = submodturquoise$gene_id,
+        keyType = "ENSEMBL",
+        OrgDb    = org.Hs.eg.db,
+        ont      = "BP",
+        pAdjustMethod = "fdr",
+        pvalueCutoff = 0.05, 
+        readable = TRUE)
+
+head(turquoiseGO, 33)
+nrow(turquoiseGO)
+tur.df <- as.data.frame(turquoiseGO)
+```
+
+```{r}
+require(ggplot2)
+
+jpeg("dotGO turquoise module.jpeg", width = 160, height = 70, units = "cm", res = 400)
+
+dotplot(turquoiseGO, showCategory = 10, font.size = 40) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 35),
+  plot.title = element_text(size = 40, hjust = 0.5)
+  ) + ggtitle("GO Analysis of genes in turquoise module")
+
+dev.off()
+```
+
+```{r}
+#barplot
+
+jpeg("barplotGO turquoise module.jpeg", width = 80, height = 50, units = "cm", res = 40)
+
+barplot(turquoiseGO, showCategory = 10, font.size = 30) + theme(
+  legend.title = element_text(size = 20),
+  legend.text = element_text(size = 20),
+  plot.title = element_text(size = 40, hjust = 0.7)
+  ) + ggtitle("GO Analysis of genes in turquoise module")
+
+dev.off()
+```
+
+
+
+
+
+
+
+```{r}
+chooseTopHubInEachModule(data.filtered.IBM, colorh = moduleColors)
+#dysregulated genes
+
+```
+
+
+
+###################################
+Network visualization 
+###################################
+
+
+```{r}
+# Recalculate topological overlap if needed
+TOM = TOMsimilarityFromExpr(data.filtered.IBM, power = 5);
+#save(TOM, file = "WGCNA-TOM.RData")
+
+# Select modules
+modules = "turquoise"
+#modules = "turquoise"
+# Select module probes
+probes = names(data.filtered.IBM)
+inModule = is.finite(match(moduleColors, modules));
+modProbes = probes[inModule];
+# Select the corresponding Topological Overlap
+modTOM = TOM[inModule, inModule];
+dimnames(modTOM) = list(modProbes, modProbes)
+modGenes = geneInfo$Gene.ID[match(modProbes, geneInfo$Gene.ID)]
+#choose the top 20 hub genes
+nTop = 20
+IMConn = softConnectivity(data.filtered.IBM[, modProbes]);
+top = (rank(-IMConn) <= nTop)
+# threshold is 0.32 in order to visualize the network in cytoscape
+cyt = exportNetworkToCytoscape(modTOM,
+  edgeFile = paste("CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
+  nodeFile = paste("CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+  weighted = TRUE,
+  threshold = 0.32,
+  nodeNames = modProbes,
+  nodeAttr = moduleColors[inModule])
+```
+
+
+
+
