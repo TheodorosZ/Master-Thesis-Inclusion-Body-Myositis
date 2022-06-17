@@ -15,4 +15,4 @@ A script to find the co-expressed genes in IBM
 
 # eQTL analysis
 To run this analysis, you will need the whole exome sequencing (WES) dataset, that is currently not available publicly. Therefore, the analysis
-cannot be done. 
+cannot be done without this dataset.
