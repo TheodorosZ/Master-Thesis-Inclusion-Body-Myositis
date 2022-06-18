@@ -22,4 +22,5 @@ cannot be done without this dataset.
 # Information about the files
 
 raw_counts.txt = raw counts of the samples used for the analysis
+
 res.LFCshrink.txt = results of the differentiall gene expression analysis, using the log-fold shrinkage argument
