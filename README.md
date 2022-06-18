@@ -24,3 +24,7 @@ cannot be done without this dataset.
 raw_counts.txt = raw counts of the samples used for the analysis
 
 res.LFCshrink.txt = results of the differentiall gene expression analysis, using the log-fold shrinkage argument
+
+sample metadata.txt = covariates of the samples
+
+# Run the analysis, by starting from the differential gene expression, followed by the enrichment analysis, the WGCNA and finally the eQTL analysis
