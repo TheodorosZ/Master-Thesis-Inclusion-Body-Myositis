@@ -27,4 +27,6 @@ res.LFCshrink.txt = results of the differentiall gene expression analysis, using
 
 sample metadata.txt = covariates of the samples
 
+normalized_id_eQTLs_input.txt = contains the normalized genes identifiers, and their chromosomes starting/ending points
+
 # Run the analysis, by starting from the differential gene expression, followed by the enrichment analysis, the WGCNA and finally the eQTL analysis
