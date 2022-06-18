@@ -31,4 +31,6 @@ sample metadata.txt = covariates of the samples
 
 normalized_id_eQTLs_input.txt = contains the normalized genes identifiers, and their chromosomes starting/ending points
 
+#For any question, please send an email at t.zarotiadis@student.maastrichtuniversity.nl
+
 
