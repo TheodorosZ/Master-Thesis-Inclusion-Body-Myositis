@@ -1,6 +1,8 @@
 # Master-Thesis-Inclusion-Body-Myositis
 In this repository you can find the scripts I used for my Master Thesis in Inclusion Body Myositis
 
+# Run the analysis, by starting from the differential gene expression, followed by the enrichment analysis, the WGCNA and finally the eQTL analysis
+
 # Differential Gene Expression analysis
 Simple differential gene expression analysis using DESeq2. This script was produced by another member within the ejprd group.
 
@@ -29,4 +31,4 @@ sample metadata.txt = covariates of the samples
 
 normalized_id_eQTLs_input.txt = contains the normalized genes identifiers, and their chromosomes starting/ending points
 
-# Run the analysis, by starting from the differential gene expression, followed by the enrichment analysis, the WGCNA and finally the eQTL analysis
+
