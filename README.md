@@ -4,7 +4,7 @@ In this repository you can find the scripts I used for my Master Thesis in Inclu
 # Run the analysis, by starting from the differential gene expression, followed by the HGNC symbols to genes, the enrichment analysis, the WGCNA and finally the eQTL analysis
 
 # Differential Gene Expression analysis
-Simple differential gene expression analysis using DESeq2. This script was produced by another member within the ejprd group.
+Simple differential gene expression analysis using DESeq2. This script was produced by another member within the European Joint Programm of Rare Diseases (EJPRD) group.
 
 # GO enrichment analysis
 Enriched GO terms of the differentially expressed genes
