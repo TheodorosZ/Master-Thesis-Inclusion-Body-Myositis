@@ -1,7 +1,7 @@
 # Master-Thesis-Inclusion-Body-Myositis
 In this repository you can find the scripts I used for my Master Thesis in Inclusion Body Myositis
 
-# Run the analysis, by starting from the differential gene expression, followed by the HGCN symbols to genes, the enrichment analysis, the WGCNA and finally the eQTL analysis
+# Run the analysis, by starting from the differential gene expression, followed by the HGNC symbols to genes, the enrichment analysis, the WGCNA and finally the eQTL analysis
 
 # Differential Gene Expression analysis
 Simple differential gene expression analysis using DESeq2. This script was produced by another member within the ejprd group.
